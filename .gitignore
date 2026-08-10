@@ -1,0 +1,35 @@
+# --- Environment / secrets ---
+.env
+.env.*
+!.env.example
+
+# --- Python / backend ---
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# --- Node / frontend ---
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# --- SQLite runtime artifacts ---
+*.db-wal
+*.db-shm
+*.db-journal
+
+# --- Uploaded (session-scoped) databases: never committed ---
+backend/data/uploads/*
+!backend/data/uploads/.gitkeep
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
