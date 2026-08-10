@@ -47,3 +47,31 @@ def last_query_error(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
         if entry["tool"] == "execute_query" and not entry["result"].get("success"):
             return entry
     return None
+
+
+def last_chart(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The most recent successful `generate_chart` result that produced a
+    real chart (not `chart_type: "none"`), if any."""
+    for entry in reversed(records):
+        if entry["tool"] != "generate_chart" or not entry["result"].get("success"):
+            continue
+        if entry["result"].get("chart_type") == "none":
+            continue
+        return entry["result"]
+    return None
+
+
+def last_diagram(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The most recent successful `generate_flowchart` result, if any."""
+    for entry in reversed(records):
+        if entry["tool"] == "generate_flowchart" and entry["result"].get("success"):
+            return entry["result"]
+    return None
+
+
+def last_explanation(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The most recent successful `explain_data` result, if any."""
+    for entry in reversed(records):
+        if entry["tool"] == "explain_data" and entry["result"].get("success"):
+            return entry["result"]
+    return None

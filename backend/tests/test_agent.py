@@ -57,14 +57,16 @@ def test_configuration_error_message_never_contains_the_key(monkeypatch):
 # --- Tool registry --------------------------------------------------------
 
 
-def test_registry_contains_get_schema_and_execute_query():
-    assert tool_registry.registered_tool_names() == ["get_schema", "execute_query"]
-
-
-def test_future_phase_tools_are_not_registered_yet():
-    """Phases 8-10 tools must not appear until their phase."""
+def test_registry_contains_core_query_tools():
+    """The read/query backbone is always registered, whatever later tools land."""
     registered = set(tool_registry.registered_tool_names())
-    assert not registered & {"generate_chart", "explain_data", "generate_flowchart"}
+    assert {"get_schema", "execute_query"} <= registered
+
+
+def test_all_five_mandatory_tools_are_registered():
+    """The five tools the brief requires are all present (Phases 4-10)."""
+    registered = set(tool_registry.registered_tool_names())
+    assert {"get_schema", "execute_query", "generate_chart", "explain_data", "generate_flowchart"} <= registered
 
 
 def test_registered_tools_do_not_expose_session_id_to_the_llm():
@@ -111,10 +113,10 @@ def test_agent_can_invoke_execute_query_and_fills_envelope():
     assert all(isinstance(value, (int, float)) for value in revenues)
 
 
-def test_agent_binds_only_the_two_phase_six_tools():
+def test_agent_binds_all_registered_tools():
     model = _scripted(final_answer("Hello."))
     agent_service.run_agent("agent-s3", "hi", model=model)
-    assert model.bound_tools == ["get_schema", "execute_query"]
+    assert set(model.bound_tools) == set(tool_registry.registered_tool_names())
 
 
 def test_response_leaves_later_phase_fields_empty():

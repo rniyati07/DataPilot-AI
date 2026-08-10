@@ -9,12 +9,13 @@ Charts, explanations, and diagrams belong to Phases 8-10 and are not
 requested from the agent here.
 """
 import logging
-from typing import Any, Optional
+from typing import Any
 
-from app.agent import trace
+from app.agent import error_recovery, trace
 from app.agent.llm_provider import LlmConfigurationError, get_chat_model
 from app.agent.tool_registry import build_tools
 from app.models.schemas import ChatResponse, ErrorDetail
+from app.session import store as session_store
 from app.session.context import session_scope
 
 logger = logging.getLogger(__name__)
@@ -22,6 +23,10 @@ logger = logging.getLogger(__name__)
 # Bounds tool-calling loops in code, not by prompt instruction alone. The
 # single-retry self-correction loop is Phase 12 — this is only a safety stop.
 MAX_AGENT_STEPS = 12
+
+# Rows of the prior result set re-presented to the model on follow-up turns,
+# so "these products" resolves without re-querying while prompts stay bounded.
+PRIOR_RESULT_MAX_ROWS = 10
 
 SYSTEM_PROMPT = """You are DataPilot AI, a careful database analyst.
 
@@ -38,7 +43,22 @@ Rules:
 - Base your answer only on rows actually returned by `execute_query`.
   Never invent, estimate, or extrapolate data that was not returned.
 - If a query returns no rows, say so plainly rather than inventing results.
+- If execute_query fails with a database error (its result has error.type
+  'sql_error'), fix the SQL (re-check get_schema if needed) and retry exactly
+  once. If it succeeds after that, briefly tell the user you corrected the
+  query. If it fails again (error.type 'retry_limit_reached'), stop and explain
+  the limitation in plain language.
 - Keep tool usage focused: do not re-run a query whose result you already have.
+- After a data query, if the result is a comparison, trend, or share the user
+  asked to see, call `generate_chart` with the result's columns/rows. If the
+  tool returns chart_type 'none', present the table and skip the chart.
+- End a data turn with `explain_data` (pass the result's columns/rows and the
+  user's question) so the user gets a plain-language read on the result. Do
+  not call it for scalar facts the reply already covers.
+- For structure questions use `generate_flowchart`: diagram_type 'er' for the
+  database schema; diagram_type 'process' only after you derive the step
+  sequence yourself and supply context.steps. Never call it for plain data
+  questions.
 - Answer in clear, brief prose. Do not paste the full result table into your
   reply — the interface displays it separately. Summarize the finding instead.
 """
@@ -103,12 +123,29 @@ def run_agent(session_id: str, message: str, model: Any = None) -> ChatResponse:
     # The session travels through the execution context so the tools resolve
     # the right active database without `session_id` being LLM-facing.
     try:
-        with session_scope(session_id), trace.trace_scope() as records:
+        memory = session_store.get_memory(session_id)
+        # Recent turns plus, when present, the previous result set — so
+        # follow-ups ("now show their trend") resolve against prior context.
+        history = _conversation_messages(session_id, memory)
+        with (
+            session_scope(session_id),
+            trace.trace_scope() as records,
+            error_recovery.retry_budget_scope(),
+        ):
             result = agent.invoke(
-                {"messages": [{"role": "user", "content": message}]},
+                {"messages": history + [{"role": "user", "content": message}]},
                 config={"recursion_limit": MAX_AGENT_STEPS},
             )
-            return _compose_response(result, records)
+            response = _compose_response(result, records)
+            memory.add_user(message)
+            reply = _final_message_text(result)
+            if reply:
+                memory.add_assistant(reply)
+            last_query = trace.last_successful_query(records)
+            session_store.set_last_results(
+                session_id, last_query["result"] if last_query else None
+            )
+            return response
     except Exception:  # noqa: BLE001 - never leak provider/agent internals
         logger.exception("Agent invocation failed for session %s", session_id)
         return _error_response(
@@ -117,11 +154,37 @@ def run_agent(session_id: str, message: str, model: Any = None) -> ChatResponse:
         )
 
 
-def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatResponse:
-    """Maps the agent run onto the response envelope."""
-    text = _final_message_text(result)
-    successful = trace.last_successful_query(records)
+def _conversation_messages(session_id: str, memory: Any) -> list[dict[str, str]]:
+    """Prior text turns, plus the previous result set rendered compactly so
+    entity references resolve without forcing a re-query (Architecture §7)."""
+    messages = memory.to_messages()
+    prior = session_store.get_last_results(session_id)
+    if prior and prior.get("rows"):
+        lines = ["[Result set from your previous question]"]
+        columns = prior.get("columns") or []
+        if columns:
+            lines.append(", ".join(str(column) for column in columns))
+        for row in (prior.get("rows") or [])[:PRIOR_RESULT_MAX_ROWS]:
+            lines.append(", ".join(str(value) for value in row))
+        messages = messages + [{"role": "user", "content": "\n".join(lines)}]
+    return messages
 
+
+def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatResponse:
+    """Maps the agent run onto the response envelope.
+
+    Charts/diagrams/explanations are taken from the trace regardless of which
+    branch the message lands in, so a pure diagram turn ("draw the ER diagram",
+    with no execute_query) still returns its Mermaid syntax.
+    """
+    text = _final_message_text(result)
+    chart = trace.last_chart(records)
+    diagram = trace.last_diagram(records)
+    explanation = trace.last_explanation(records)
+    diagram_text = diagram["mermaid_syntax"] if diagram else None
+    explanation_text = explanation["explanation"] if explanation else None
+
+    successful = trace.last_successful_query(records)
     if successful:
         payload = successful["result"]
         note = ""
@@ -132,6 +195,9 @@ def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatRespons
             sql=successful["args"].get("sql"),
             columns=payload.get("columns", []),
             rows=payload.get("rows", []),
+            chart=chart,
+            diagram=diagram_text,
+            explanation=explanation_text,
         )
 
     # No successful query — surface a failed one gracefully, if there was one.
@@ -143,6 +209,9 @@ def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatRespons
         return ChatResponse(
             message=user_message,
             sql=failed["args"].get("sql"),
+            chart=chart,
+            diagram=diagram_text,
+            explanation=explanation_text,
             error=ErrorDetail(type=error_type, message=user_message),
         )
 
@@ -151,7 +220,7 @@ def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatRespons
         return _error_response(
             "agent_error", "The AI analyst did not return an answer. Please try again."
         )
-    return ChatResponse(message=text)
+    return ChatResponse(message=text, chart=chart, diagram=diagram_text, explanation=explanation_text)
 
 
 def _friendly_query_error(error_type: str) -> str:
@@ -162,6 +231,10 @@ def _friendly_query_error(error_type: str) -> str:
         ),
         "timeout": "That query took too long to run. Try narrowing it down.",
         "database_unavailable": "The database could not be reached. Please try again.",
+        "retry_limit_reached": (
+            "I tried that query once more after an automatic correction, but it "
+            "still could not be completed against the current database."
+        ),
     }.get(error_type, "That query could not be completed against the current database.")
 
 

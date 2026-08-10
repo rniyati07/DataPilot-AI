@@ -32,6 +32,10 @@ class Settings(BaseSettings):
     default_max_rows: int = 200
     query_timeout_seconds: int = 15
 
+    # Explanation summarization (04_AGENT_TOOLS.md Tool 5 §8): above this many
+    # rows, the LLM is given in-code aggregates instead of the raw row list.
+    explain_summarize_after_rows: int = 50
+
     # Backend
     backend_host: str = "0.0.0.0"
     backend_port: int = 8000

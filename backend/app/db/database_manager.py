@@ -6,12 +6,16 @@ controlled directory with a generated filename, and maps
 Database Access Layer never decide which file is active themselves — they
 always ask this module.
 """
+import logging
 import sqlite3
 import uuid
 from pathlib import Path
 
 from app.config import settings
+from app.db import engine as engine_factory
 from app.session import store as session_store
+
+logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".db", ".sqlite", ".sqlite3"}
 SQLITE_HEADER = b"SQLite format 3\x00"
@@ -112,11 +116,24 @@ def register_database(session_id: str, filename: str, content: bytes) -> str:
 
 def _remove_previous_upload(session_id: str) -> None:
     record = session_store.get_active_database(session_id)
-    if record and record.active_db_path and record.active_db_path.exists():
-        try:
-            record.active_db_path.unlink()
-        except OSError:
-            pass  # best-effort cleanup; never block the new upload on this
+    if not (record and record.active_db_path):
+        return
+    path = record.active_db_path
+    # Release SQLAlchemy's pooled connections to this file before unlinking:
+    # a live pooled connection keeps the file open, and on Windows that makes
+    # unlink() fail, leaving orphaned files in the upload directory.
+    engine_factory.dispose_engine(path)
+    if not path.exists():
+        return
+    try:
+        path.unlink()
+    except OSError:
+        # Best-effort so a new upload is never blocked, but surface the
+        # condition — a file still locked after disposal is a genuine failure.
+        logger.warning(
+            "Could not remove stale upload %s; it may be locked by another process",
+            path,
+        )
 
 
 def get_active_database_path(session_id: str) -> Path:
