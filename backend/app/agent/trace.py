@@ -1,0 +1,49 @@
+"""Per-invocation tool trace.
+
+The API layer needs the SQL the agent ran and the rows it got back in order
+to fill the response envelope (`sql`, `columns`, `rows`). Rather than
+re-parsing serialized ToolMessage content — whose exact string form is a
+LangChain implementation detail — the registry's tool wrappers record what
+they actually returned here.
+
+Scoped with a ContextVar so concurrent requests never share a trace.
+"""
+from contextlib import contextmanager
+from contextvars import ContextVar
+from typing import Any, Iterator, Optional
+
+_current_trace: ContextVar[Optional[list[dict[str, Any]]]] = ContextVar(
+    "current_tool_trace", default=None
+)
+
+
+@contextmanager
+def trace_scope() -> Iterator[list[dict[str, Any]]]:
+    records: list[dict[str, Any]] = []
+    token = _current_trace.set(records)
+    try:
+        yield records
+    finally:
+        _current_trace.reset(token)
+
+
+def record(tool_name: str, args: dict[str, Any], result: dict[str, Any]) -> None:
+    records = _current_trace.get()
+    if records is not None:
+        records.append({"tool": tool_name, "args": args, "result": result})
+
+
+def last_successful_query(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The most recent successful `execute_query` call, if any."""
+    for entry in reversed(records):
+        if entry["tool"] == "execute_query" and entry["result"].get("success"):
+            return entry
+    return None
+
+
+def last_query_error(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The most recent failed `execute_query` call, if any."""
+    for entry in reversed(records):
+        if entry["tool"] == "execute_query" and not entry["result"].get("success"):
+            return entry
+    return None

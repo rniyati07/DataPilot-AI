@@ -9,7 +9,6 @@ always ask this module.
 import sqlite3
 import uuid
 from pathlib import Path
-from typing import Optional
 
 from app.config import settings
 from app.session import store as session_store
@@ -148,3 +147,13 @@ def get_connection_path(session_id: str) -> Path:
     """The one entry point the Database Access Layer uses to resolve which
     file to connect to for a given session."""
     return get_active_database_path(session_id)
+
+
+def get_active_database_identity(session_id: str) -> str:
+    """A stable identifier for whichever database is active for this session.
+
+    Used to key the schema cache (04_AGENT_TOOLS.md Tool 1 §7) so a
+    mid-session database switch invalidates it. Internal use only — never
+    returned to the frontend or the LLM, since it is a filesystem path.
+    """
+    return str(get_active_database_path(session_id).resolve())

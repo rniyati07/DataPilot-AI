@@ -17,10 +17,18 @@ export default function MessageBubble({ role, content }) {
   }
 
   // Agent turn: SQL -> Result table -> Chart/Diagram -> Explanation (PRD §5.6 order).
+  // A structured `error` arrives with HTTP 200, so it is styled here rather
+  // than in ChatWindow's transport-level ErrorBanner.
+  const hasError = Boolean(content.error)
+
   return (
     <div className="flex justify-start">
-      <div className="max-w-[85%] space-y-3 rounded-2xl rounded-bl-sm border border-slate-200 bg-white px-4 py-3">
-        <p className="text-slate-800">{content.message}</p>
+      <div
+        className={`max-w-[85%] space-y-3 rounded-2xl rounded-bl-sm border px-4 py-3 ${
+          hasError ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-white'
+        }`}
+      >
+        <p className={hasError ? 'text-amber-900' : 'text-slate-800'}>{content.message}</p>
         <SqlPanel sql={content.sql} />
         <ResultTable columns={content.columns} rows={content.rows} />
         <ChartRenderer chart={content.chart} />

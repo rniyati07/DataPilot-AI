@@ -4,16 +4,19 @@ A conversational AI data analyst — upload a SQLite database and ask questions
 about it in natural language. Built for the Sairam Hackathon 2026 / iTech AI
 Innovation Hackathon 2026.
 
-> **Status:** Batch 1 complete (Phases 0-3 — foundation, frontend skeleton,
-> backend skeleton, Database Manager + SQLite upload). The LangChain agent
-> and its five tools (`get_schema`, `execute_query`, `generate_chart`,
-> `generate_flowchart`, `explain_data`) land in Batch 2. See `docs/` for the
-> full specification.
+> **Status:** Batch 2 complete (Phases 0-6). You can ask a natural-language
+> question and get a real answer from your database. Two of the five agent
+> tools are implemented — `get_schema` and `execute_query`. The remaining
+> three (`generate_chart`, `explain_data`, `generate_flowchart`) land in
+> Batch 3. See `docs/` for the full specification.
 
 ## Architecture
 
 ```
-React Frontend  →  FastAPI Backend  →  Database Manager  →  Active SQLite DB
+React Frontend
+    →  FastAPI Backend
+        →  LangChain Agent  →  get_schema / execute_query
+            →  Database Manager  →  Active SQLite DB
 ```
 
 See `docs/03_ARCHITECTURE.md` for the full system design.
@@ -58,8 +61,30 @@ Frontend runs at `http://localhost:5173`.
 ## Environment Variables
 
 See `.env.example` at the repo root for the full list (LLM provider config,
-`DATABASE_URL`, `DATABASE_UPLOAD_DIR`, CORS origins, etc). The application
-starts successfully without an LLM API key — the agent is not wired in yet.
+`DATABASE_URL`, `DATABASE_UPLOAD_DIR`, query guards, CORS origins, etc).
+
+### Enabling the AI analyst
+
+Chat requires an LLM API key. Set these in `.env`:
+
+```
+LLM_PROVIDER=openai        # openai | gemini | anthropic
+LLM_MODEL=                 # optional; a sensible per-provider default is used
+LLM_API_KEY=your-key-here
+```
+
+The backend still starts and serves `/api/health` and all `/api/database/*`
+endpoints without a key — chat returns a structured `llm_unavailable`
+message instead of crashing.
+
+## Example questions
+
+- "Show me the top 5 products by revenue."
+- "How many customers are in the database?"
+- "Which category has the most products?"
+
+Every data-producing answer returns the generated SQL alongside the result
+table, so you can always see exactly what ran.
 
 ## Uploading a database
 
@@ -94,9 +119,11 @@ DataPilot AI/
 │   │   ├── main.py        # FastAPI app + CORS
 │   │   ├── config.py      # Environment-driven settings
 │   │   ├── routes/        # /api/chat, /api/schema, /api/database/*, /api/health
-│   │   ├── db/            # Database Manager, engine factory, access layer
+│   │   ├── agent/         # LLM provider factory, tool registry, agent service
+│   │   ├── tools/         # get_schema, execute_query
+│   │   ├── db/            # Database Manager, engine factory, access layer, SQL validator
 │   │   ├── models/         # Pydantic request/response schemas
-│   │   └── session/       # In-memory session → active-database mapping
+│   │   └── session/       # In-memory session → active-database mapping + context
 │   ├── data/               # seed.py + ecommerce.db (committed) + uploads/ (gitignored)
 │   └── tests/
 ├── .env.example

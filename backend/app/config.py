@@ -4,10 +4,16 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = BACKEND_ROOT.parent
+
+# Resolved from this file's location, not the process working directory, so
+# the same `.env` is found whether the backend is started from the project
+# root or from `backend/` (the README's documented command).
+ENV_FILE = PROJECT_ROOT / ".env"
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_file=ENV_FILE, extra="ignore")
 
     # LLM (not required to be functional until Batch 2)
     llm_provider: str = "openai"
@@ -20,6 +26,11 @@ class Settings(BaseSettings):
     # Database uploads
     database_upload_dir: str = "./data/uploads"
     database_upload_max_mb: int = 50
+
+    # Query execution guards (04_AGENT_TOOLS.md Tool 2 §5/§8)
+    hard_row_ceiling: int = 1000
+    default_max_rows: int = 200
+    query_timeout_seconds: int = 15
 
     # Backend
     backend_host: str = "0.0.0.0"
