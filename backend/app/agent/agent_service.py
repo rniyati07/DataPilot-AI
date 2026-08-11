@@ -17,6 +17,7 @@ from app.agent.tool_registry import build_tools
 from app.models.schemas import ChatResponse, ErrorDetail
 from app.session import store as session_store
 from app.session.context import session_scope
+from app.tools.generate_chart import ChartData
 
 logger = logging.getLogger(__name__)
 
@@ -170,6 +171,35 @@ def _conversation_messages(session_id: str, memory: Any) -> list[dict[str, str]]
     return messages
 
 
+def _grounded_message(text: str, payload: dict[str, Any], records: list[dict[str, Any]]) -> str:
+    """Chooses the message for a successful data turn (Phase 11 fix).
+
+    With exactly one successful `execute_query` this turn, the model's own
+    closing text is unambiguous and is used as before. With more than one,
+    free-form prose can describe an *earlier* query while `sql`/`rows` show
+    the *last* one — so in that case only a message verifiably grounded in
+    this same result is used: `explain_data`'s output, but only if it was
+    given this exact result (its recorded `data` matches `payload`), else a
+    neutral fallback that cannot misdescribe the data.
+    """
+    if trace.successful_query_count(records) <= 1:
+        return text or "Here are the results."
+
+    explanation_entry = trace.last_explanation_entry(records)
+    if explanation_entry:
+        given = explanation_entry["args"].get("data")
+        # `data` arrives as a validated `ChartData` instance on the real
+        # tool-calling path, but as a plain dict from direct/test calls —
+        # `explain_data()` itself normalizes the same way (Tool 5 §7).
+        given_dict = given.as_dict() if isinstance(given, ChartData) else (given or {})
+        if given_dict.get("columns") == payload.get("columns") and given_dict.get(
+            "rows"
+        ) == payload.get("rows"):
+            return explanation_entry["result"]["explanation"]
+
+    return "Here are the results."
+
+
 def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatResponse:
     """Maps the agent run onto the response envelope.
 
@@ -190,8 +220,9 @@ def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatRespons
         note = ""
         if payload.get("truncated"):
             note = " (results were truncated to the first {} rows)".format(payload["row_count"])
+        message = _grounded_message(text, payload, records)
         return ChatResponse(
-            message=(text or "Here are the results.") + note,
+            message=message + note,
             sql=successful["args"].get("sql"),
             columns=payload.get("columns", []),
             rows=payload.get("rows", []),

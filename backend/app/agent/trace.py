@@ -75,3 +75,23 @@ def last_explanation(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
         if entry["tool"] == "explain_data" and entry["result"].get("success"):
             return entry["result"]
     return None
+
+
+def last_explanation_entry(records: list[dict[str, Any]]) -> Optional[dict[str, Any]]:
+    """The full trace entry (args + result) for the most recent successful
+    `explain_data` call, if any. Unlike `last_explanation`, this exposes the
+    `data` the tool was actually given, so a caller can verify which query
+    result the explanation is grounded in (Phase 11 consistency check)."""
+    for entry in reversed(records):
+        if entry["tool"] == "explain_data" and entry["result"].get("success"):
+            return entry
+    return None
+
+
+def successful_query_count(records: list[dict[str, Any]]) -> int:
+    """How many `execute_query` calls in this turn succeeded."""
+    return sum(
+        1
+        for entry in records
+        if entry["tool"] == "execute_query" and entry["result"].get("success")
+    )

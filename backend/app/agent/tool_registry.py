@@ -136,7 +136,7 @@ def _explain_data_tool(
     )
     trace.record(
         "explain_data",
-        {"question": question, "chart": chart, "correction_note": correction_note},
+        {"data": data, "question": question, "chart": chart, "correction_note": correction_note},
         result,
     )
     return result
