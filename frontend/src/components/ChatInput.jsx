@@ -29,7 +29,7 @@ export default function ChatInput({ value, onChange, onSubmit, disabled }) {
             placeholder="Ask your data anything…"
             rows={1}
             className="max-h-32 w-full resize-none bg-transparent py-3.5 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
-            aria-label="Message DataPilot"
+            aria-label="Message QueryVista"
           />
         </div>
         <button
@@ -42,7 +42,7 @@ export default function ChatInput({ value, onChange, onSubmit, disabled }) {
         </button>
       </form>
       <p className="mx-auto mt-2 hidden max-w-3xl px-2 text-center text-[11px] text-slate-600 sm:block">
-        Read-only — DataPilot can only query your database, never modify it.
+        Read-only — QueryVista can only query your database, never modify it.
       </p>
     </div>
   )

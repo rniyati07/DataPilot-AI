@@ -19,7 +19,7 @@ export default function AgentMessage({ content, isLight }) {
     <div className="flex items-start gap-3">
       <Logo size={30} className="mt-1" />
       <div className="min-w-0 flex-1">
-        <p className="mb-1.5 text-xs font-semibold text-slate-400">DataPilot</p>
+        <p className="mb-1.5 text-xs font-semibold text-slate-400">QueryVista</p>
         <div className="space-y-3">
           {hasError ? (
             <div className="animate-fade-in rounded-2xl rounded-bl-sm border border-red-400/25 bg-red-400/[0.08] px-4 py-3.5 text-sm leading-relaxed text-red-200">

@@ -129,7 +129,7 @@ export default function Sidebar({
           ))}
         </ul>
         <p className="mt-4 px-1 text-[11px] leading-relaxed text-slate-600">
-          Read-only analysis. DataPilot never modifies your database.
+          Read-only analysis. QueryVista never modifies your database.
         </p>
       </div>
 

@@ -2,7 +2,7 @@ import Logo from './Logo'
 
 // Polished "thinking" state: DataPilot avatar + animated dots + honest label.
 // The request is still in flight — nothing is faked until it resolves.
-export default function StatusIndicator({ label = 'DataPilot is analyzing your data…' }) {
+export default function StatusIndicator({ label = 'QueryVista is analyzing your data…' }) {
   return (
     <div
       className="animate-fade-in flex items-start gap-3"

@@ -1,8 +1,8 @@
-# DataPilot AI — Claude Code Instructions
+# QueryVista — Claude Code Instructions
 
 ## 1. Project Overview
 
-DataPilot AI is a conversational AI data analyst being developed for the
+QueryVista is a conversational AI data analyst being developed for the
 Sairam Hackathon 2026 / iTech AI Innovation Hackathon 2026.
 
 The system allows users to upload a SQLite database and interact with its
