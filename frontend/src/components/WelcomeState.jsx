@@ -29,7 +29,7 @@ export default function WelcomeState({ database, dbState, onAsk, isLoading }) {
         </div>
 
         <h2 className="mt-6 text-2xl font-bold tracking-tight text-white sm:text-3xl">
-          Hi, I&apos;m <span className="text-gradient">DataPilot</span>.
+          Hi, I&apos;m <span className="text-gradient">QueryVista</span>.
         </h2>
 
         <p className="mx-auto mt-3 max-w-lg text-sm leading-relaxed text-slate-400 sm:text-base">

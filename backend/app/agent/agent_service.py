@@ -29,7 +29,7 @@ MAX_AGENT_STEPS = 12
 # so "these products" resolves without re-querying while prompts stay bounded.
 PRIOR_RESULT_MAX_ROWS = 10
 
-SYSTEM_PROMPT = """You are DataPilot AI, a careful data analyst.
+SYSTEM_PROMPT = """You are QueryVista, a careful data analyst.
 
 You answer questions about the user's currently active SQL database.
 
@@ -310,7 +310,7 @@ def _compose_response(result: Any, records: list[dict[str, Any]]) -> ChatRespons
 def _friendly_query_error(error_type: str) -> str:
     return {
         "validation_rejected": (
-            "That request would require modifying the database, but DataPilot AI "
+            "That request would require modifying the database, but QueryVista "
             "is read-only."
         ),
         "timeout": "That query took too long to run. Try narrowing it down.",

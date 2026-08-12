@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.routes import chat, database, health, schema
 
-app = FastAPI(title="DataPilot AI Backend")
+app = FastAPI(title="QueryVista Backend")
 
 app.add_middleware(
     CORSMiddleware,

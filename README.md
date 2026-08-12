@@ -1,4 +1,4 @@
-# DataPilot AI
+# QueryVista
 
 A conversational AI data analyst — upload a SQLite database and ask questions
 about it in natural language. Built for the Sairam Hackathon 2026 / iTech AI
@@ -107,7 +107,7 @@ venv\Scripts\python.exe -m pytest -q
 ## Project Structure
 
 ```
-DataPilot AI/
+QueryVista/
 ├── docs/                  # Source-of-truth specification (PRD, TRD, architecture, etc.)
 ├── frontend/              # React + Vite + Tailwind
 │   └── src/

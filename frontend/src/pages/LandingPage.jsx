@@ -37,7 +37,7 @@ const FEATURES = [
     icon: MessageCircle,
     title: 'Natural Language Queries',
     description:
-      'Ask questions about your database in plain English. DataPilot interprets intent and routes it through a real analysis pipeline — not a keyword search.',
+      'Ask questions about your database in plain English. QueryVista interprets intent and routes it through a real analysis pipeline — not a keyword search.',
   },
   {
     icon: Code2,
@@ -76,11 +76,11 @@ const HOW_IT_WORKS = [
     step: '01',
     title: 'Ask your data',
     description:
-      'Type a question in plain English — "show me the top products by revenue" — and DataPilot starts a real analysis turn against your active database.',
+      'Type a question in plain English — "show me the top products by revenue" — and QueryVista starts a real analysis turn against your active database.',
   },
   {
     step: '02',
-    title: 'DataPilot analyzes',
+    title: 'QueryVista analyzes',
     description:
       'The agent inspects your live schema, writes safe read-only SQL, executes it, and builds charts and explanations from the actual result rows.',
   },
@@ -156,7 +156,7 @@ export default function LandingPage({ onEnter }) {
           </h1>
 
           <p className="mx-auto mt-6 max-w-2xl text-base leading-relaxed text-slate-400 sm:text-lg">
-            DataPilot AI is a conversational data analyst. Interact with your
+            QueryVista is a conversational data analyst. Interact with your
             database using natural language — it generates SQL, runs it
             read-only, and turns the results into charts, diagrams, and
             plain-language insights.
@@ -273,7 +273,7 @@ export default function LandingPage({ onEnter }) {
               Try it on the demo database
             </h2>
             <p className="mt-4 text-slate-400">
-              DataPilot ships with a small e-commerce SQLite database — customers,
+              QueryVista ships with a small e-commerce SQLite database — customers,
               categories, products, orders, order items, inventory and payments.
               Open the dashboard and ask any of these, or upload your own SQLite
               file and ask about that instead.

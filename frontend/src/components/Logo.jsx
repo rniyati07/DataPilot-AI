@@ -29,7 +29,7 @@ export default function Logo({ withWordmark = false, size = 32, className = '' }
       {mark}
       <span className="flex flex-col leading-none">
         <span className="text-[15px] font-bold tracking-tight text-white">
-          DataPilot <span className="text-gradient">AI</span>
+          QueryVista
         </span>
         <span className="mt-1 text-[10px] font-medium uppercase tracking-[0.18em] text-slate-500">
           Data Analyst
