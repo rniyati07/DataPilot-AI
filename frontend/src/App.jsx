@@ -1,21 +1,26 @@
-import ChatWindow from './components/ChatWindow'
-import DatabaseUpload from './components/DatabaseUpload'
+import { useEffect, useState } from 'react'
+import LandingPage from './pages/LandingPage'
+import DashboardPage from './pages/DashboardPage'
+import { applyTheme, getStoredTheme } from './lib/theme'
 
+// Two views: a public landing page and the dashboard. State-based switching
+// keeps the bundle dependency-free (no router needed for a single app flow).
+// Theme lives here so both views share one preference.
 export default function App() {
-  return (
-    <div className="mx-auto flex h-screen max-w-5xl flex-col p-4">
-      <header className="mb-4">
-        <h1 className="text-xl font-bold text-slate-900">DataPilot AI</h1>
-        <p className="text-sm text-slate-500">Conversational AI data analyst</p>
-      </header>
+  const [view, setView] = useState('landing')
+  const [theme, setTheme] = useState(() => getStoredTheme())
 
-      <div className="mb-4">
-        <DatabaseUpload />
-      </div>
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
 
-      <div className="flex-1 overflow-hidden rounded-xl border border-slate-200 bg-white">
-        <ChatWindow />
-      </div>
-    </div>
+  return view === 'landing' ? (
+    <LandingPage onEnter={() => setView('dashboard')} theme={theme} onThemeChange={setTheme} />
+  ) : (
+    <DashboardPage
+      onBackHome={() => setView('landing')}
+      theme={theme}
+      onThemeChange={setTheme}
+    />
   )
 }

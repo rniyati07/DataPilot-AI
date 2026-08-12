@@ -38,9 +38,14 @@ EXECUTE_QUERY_DESCRIPTION = (
 
 GENERATE_CHART_DESCRIPTION = (
     "Turn a bounded tabular result into a ready-to-render Plotly chart. Pass the "
-    "columns/rows straight through from execute_query. Returns a chart spec and "
-    "chart_type (bar, line, pie, scatter, or none) — 'none' means a chart would not "
-    "add clarity, so show the table and explain_data instead."
+    "columns/rows straight through from execute_query, and ALWAYS pass the user's "
+    "original question as `intent` — the chart type is chosen from it, so omitting "
+    "it can produce the wrong chart or none at all. When the user names a chart "
+    "type ('as a line chart', 'as a pie chart', 'scatter plot'), that wording must "
+    "appear in `intent`. Use `x_field`/`y_field` to name the columns to plot when "
+    "the result has more than two. Returns a chart spec and chart_type (bar, line, "
+    "pie, scatter, or none) — 'none' means a chart would not add clarity, so show "
+    "the table and explain_data instead."
 )
 
 EXPLAIN_DATA_DESCRIPTION = (

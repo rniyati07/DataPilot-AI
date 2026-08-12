@@ -1,30 +1,54 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MessageBubble from './MessageBubble'
 import StatusIndicator from './StatusIndicator'
 import ErrorBanner from './ErrorBanner'
+import WelcomeState from './WelcomeState'
+import ChatInput from './ChatInput'
 import { sendChatMessage, ApiError } from '../api/client'
 
-export default function ChatWindow() {
-  const [messages, setMessages] = useState([])
+// The conversation, not a query editor (frontend batch §Batch 3). Holds the
+// thread in memory, sends real requests through the existing API, and keeps
+// the newest content in view.
+export default function ChatWindow({
+  database,
+  dbState,
+  initialMessages = [],
+  onMessagesChange,
+  isLight = false,
+}) {
+  const [messages, setMessages] = useState(initialMessages)
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+  const scrollAnchorRef = useRef(null)
 
-  async function handleSubmit(event) {
-    event.preventDefault()
-    const trimmed = input.trim()
+  useEffect(() => {
+    scrollAnchorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+  }, [messages, isLoading])
+
+  function commit(updater) {
+    setMessages((prev) => {
+      const next = updater(prev)
+      onMessagesChange?.(next)
+      return next
+    })
+  }
+
+  async function ask(text) {
+    const trimmed = text.trim()
     if (!trimmed || isLoading) return
 
-    setMessages((prev) => [...prev, { role: 'user', content: { message: trimmed } }])
+    commit((prev) => [...prev, { role: 'user', content: { message: trimmed } }])
     setInput('')
     setIsLoading(true)
     setError(null)
 
     try {
       const response = await sendChatMessage(trimmed)
-      setMessages((prev) => [...prev, { role: 'agent', content: response }])
+      commit((prev) => [...prev, { role: 'agent', content: response }])
     } catch (err) {
-      const message = err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
+      const message =
+        err instanceof ApiError ? err.message : 'Something went wrong. Please try again.'
       setError(message)
     } finally {
       setIsLoading(false)
@@ -33,42 +57,28 @@ export default function ChatWindow() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 space-y-4 overflow-y-auto p-4">
-        {messages.length === 0 && (
-          <p className="text-center text-sm text-slate-400">
-            Ask a question about your data to get started.
-          </p>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {messages.length === 0 ? (
+          <WelcomeState database={database} dbState={dbState} onAsk={ask} isLoading={isLoading} />
+        ) : (
+          <div className="mx-auto max-w-3xl space-y-6 px-4 py-6 sm:px-6">
+            {messages.map((msg, index) => (
+              // eslint-disable-next-line react/no-array-index-key
+              <MessageBubble key={index} role={msg.role} content={msg.content} isLight={isLight} />
+            ))}
+            {isLoading && <StatusIndicator />}
+          </div>
         )}
-        {messages.map((msg, index) => (
-          // eslint-disable-next-line react/no-array-index-key
-          <MessageBubble key={index} role={msg.role} content={msg.content} />
-        ))}
-        {isLoading && <StatusIndicator label="Thinking…" />}
+        <div ref={scrollAnchorRef} />
       </div>
 
       {error && (
-        <div className="px-4 pb-2">
+        <div className="px-4 pb-3 sm:px-6">
           <ErrorBanner message={error} onDismiss={() => setError(null)} />
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="flex gap-2 border-t border-slate-200 p-4">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="Ask about your data…"
-          className="flex-1 rounded-lg border border-slate-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-400"
-          disabled={isLoading}
-        />
-        <button
-          type="submit"
-          disabled={isLoading || !input.trim()}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white disabled:opacity-40"
-        >
-          Send
-        </button>
-      </form>
+      <ChatInput value={input} onChange={setInput} onSubmit={ask} disabled={isLoading} />
     </div>
   )
 }

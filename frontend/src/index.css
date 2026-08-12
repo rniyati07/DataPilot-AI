@@ -1,6 +1,313 @@
 @import "tailwindcss";
 
+/* ---------------------------------------------------------------------------
+   DataPilot AI design system (Batch 2). Tailwind v4 CSS-first configuration.
+   Deep-navy "AI analytics" visual language: dark surfaces, ambient gradient
+   glows, subtle grid, cyan→indigo→violet accents.
+--------------------------------------------------------------------------- */
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", SFMono-Regular, Menlo,
+    Consolas, "Liberation Mono", monospace;
+
+  /* Base navies — lightest to darkest */
+  --color-ink-700: #232e4d;
+  --color-ink-800: #141d3a;
+  --color-ink-850: #0f1730;
+  --color-ink-900: #0b1224;
+  --color-ink-950: #070b16;
+
+  /* Accents */
+  --color-brand-cyan: #22d3ee;
+  --color-brand-indigo: #6366f1;
+  --color-brand-violet: #8b5cf6;
+
+  --animate-fade-up: fade-up 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.4s ease both;
+  --animate-typing: typing 1.2s ease-in-out infinite;
+  --animate-glow-pulse: glow-pulse 5s ease-in-out infinite;
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes typing {
+  0%,
+  100% {
+    opacity: 0.25;
+    transform: translateY(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+@keyframes glow-pulse {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+:root {
+  color-scheme: dark;
+}
+
+/* ---------------------------------------------------------------------------
+   Light theme (refinement Part B).
+
+   Rather than restyling every component, the design tokens themselves are
+   remapped. The UI expresses surfaces as `ink-*` and translucent `white/x%`
+   overlays, and text as the `slate-*` ramp; redefining those variables flips
+   the whole interface coherently and keeps one source of truth.
+
+   `--color-white` becomes the ink colour on purpose: in this codebase "white"
+   means "the overlay/foreground colour", so `bg-white/[0.03]`, `border-white/8`
+   and `text-white` all resolve correctly in both themes. Anything that must
+   stay truly white sits on an accent fill and is handled by .bg-brand-gradient.
+--------------------------------------------------------------------------- */
+[data-theme='light'] {
+  color-scheme: light;
+
+  /* Surfaces, lightest to "darkest" (roles preserved, values inverted) */
+  --color-ink-950: #f6f8fc;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #eef2f8;
+  --color-ink-800: #e2e8f0;
+  --color-ink-700: #cbd5e1;
+
+  /* Text ramp: the dark theme's bright-to-dim becomes dark-to-light */
+  --color-white: #0f172a;
+  --color-slate-50: #0b1220;
+  --color-slate-100: #0f172a;
+  --color-slate-200: #1e293b;
+  --color-slate-300: #334155;
+  --color-slate-400: #475569;
+  --color-slate-500: #64748b;
+  --color-slate-600: #94a3b8;
+
+  /* Accents darkened slightly so they hold contrast on white */
+  --color-brand-cyan: #0891b2;
+  --color-brand-indigo: #4f46e5;
+  --color-brand-violet: #7c3aed;
+}
+
+[data-theme='light'] body {
+  color: #0f172a;
+}
+
+[data-theme='light'] .glass-card {
+  background: #ffffff;
+  border: 1px solid rgb(15 23 42 / 0.09);
+  box-shadow: 0 1px 2px rgb(15 23 42 / 0.04), 0 8px 24px rgb(15 23 42 / 0.06);
+}
+
+[data-theme='light'] .glass-card-hover:hover {
+  border-color: rgb(79 70 229 / 0.4);
+  box-shadow: 0 12px 32px rgb(15 23 42 / 0.1), 0 0 0 1px rgb(79 70 229 / 0.12);
+}
+
+[data-theme='light'] .bg-grid {
+  background-image: linear-gradient(to right, rgb(71 85 105 / 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgb(71 85 105 / 0.07) 1px, transparent 1px);
+}
+
+/* Ambient glows are tuned for a dark canvas; soften them on light. */
+[data-theme='light'] .ambient-glow {
+  opacity: 0.35;
+}
+
+[data-theme='light'] .text-gradient {
+  background: linear-gradient(90deg, #0891b2 0%, #4f46e5 50%, #7c3aed 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+[data-theme='light'] * {
+  scrollbar-color: rgb(71 85 105 / 0.35) transparent;
+}
+[data-theme='light'] *::-webkit-scrollbar-thumb {
+  background: rgb(71 85 105 / 0.3);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+
+/* Accent-filled controls always carry true white text, in either theme. */
+.bg-brand-gradient {
+  color: #ffffff;
+}
+
+/* ---------------------------------------------------------------------------
+   Mermaid ER safety net.
+
+   Row fills come from mermaid's rowOdd/rowEven theme variables (set in
+   DiagramRenderer). This is a narrowly scoped backstop for the row *text*:
+   mermaid emits attribute labels as <text> inside the entity group, and if a
+   future version derives their colour differently, the rows would silently
+   lose contrast again. Scoped to .dp-diagram so no other SVG or app text is
+   affected.
+--------------------------------------------------------------------------- */
+.dp-diagram svg text {
+  fill: #e2e8f0;
+}
+[data-theme='light'] .dp-diagram svg text {
+  fill: #0f172a;
+}
+/* Entity/relationship strokes stay visible against either surface. */
+.dp-diagram svg .relationshipLine,
+.dp-diagram svg path.er {
+  stroke: #94a3b8;
+}
+[data-theme='light'] .dp-diagram svg .relationshipLine,
+[data-theme='light'] .dp-diagram svg path.er {
+  stroke: #64748b;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+/* Landing-page anchor navigation glides instead of jumping. */
+html {
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
 body {
   margin: 0;
-  background-color: #f8fafc;
+  font-family: var(--font-sans);
+  background-color: var(--color-ink-950);
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Subtle grid backdrop used on the landing page and dashboard. */
+.bg-grid {
+  background-image: linear-gradient(
+      to right,
+      rgb(148 163 184 / 0.055) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to bottom, rgb(148 163 184 / 0.055) 1px, transparent 1px);
+  background-size: 46px 46px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 0%, black 30%, transparent 78%);
+}
+
+/* Dark translucent surface used for cards and panels. */
+.glass-card {
+  background: linear-gradient(
+    180deg,
+    rgb(255 255 255 / 0.055),
+    rgb(255 255 255 / 0.02)
+  );
+  border: 1px solid rgb(255 255 255 / 0.09);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.04) inset, 0 8px 24px rgb(2 6 23 / 0.35);
+}
+
+.glass-card-hover {
+  transition: border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+.glass-card-hover:hover {
+  border-color: rgb(99 102 241 / 0.4);
+  transform: translateY(-2px);
+  box-shadow: 0 1px 0 rgb(255 255 255 / 0.05) inset,
+    0 12px 32px rgb(2 6 23 / 0.5), 0 0 0 1px rgb(99 102 241 / 0.12);
+}
+
+/* Gradient text for headings and brand marks. */
+.text-gradient {
+  background: linear-gradient(90deg, #22d3ee 0%, #818cf8 50%, #c084fc 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Gradient chip / button fill. */
+.bg-brand-gradient {
+  background-image: linear-gradient(120deg, #6366f1 0%, #8b5cf6 55%, #06b6d4 130%);
+}
+
+/* Shared card-header action (Copy SQL, Download chart, …) so every response
+   card exposes its actions with identical affordance and focus treatment. */
+.action-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  border-radius: 0.5rem;
+  padding: 0.375rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 500;
+  color: rgb(148 163 184);
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.action-button:hover:not(:disabled) {
+  background-color: rgb(255 255 255 / 0.06);
+  color: #fff;
+}
+.action-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+/* Visible keyboard focus on the dark surface (accessibility, Batch 8). */
+.action-button:focus-visible,
+.focus-ring:focus-visible {
+  outline: 2px solid var(--color-brand-cyan);
+  outline-offset: 2px;
+}
+
+/* Thin, unobtrusive scrollbars that fit the dark theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.28) transparent;
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgb(148 163 184 / 0.22);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgb(148 163 184 / 0.4);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
 }
