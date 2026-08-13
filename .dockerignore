@@ -1,0 +1,42 @@
+# Git
+.git
+.gitignore
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Python / backend
+backend/venv/
+backend/__pycache__/
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+npm-debug.log*
+
+# SQLite runtime artifacts (will be in volume)
+*.db-wal
+*.db-shm
+*.db-journal
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile
+docker-compose.yml
+*.md
+context/
+docs/

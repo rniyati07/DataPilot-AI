@@ -28,472 +28,314 @@ in one conversation.
 |---|---|---|
 | [1. Overview](#1-overview) | [8. Visualization & Diagram Engine](#8-visualization--diagram-engine) | [15. Example Conversations](#15-example-conversations) |
 | [2. The Problem](#2-the-problem) | [9. Conversational Intelligence](#9-conversational-intelligence) | [16. Testing](#16-testing) |
-| [3. The QueryVista Approach](#3-the-queryvista-approach) | [10. Technology Stack](#10-technology-stack) | [17. Deployment](#17-deployment) |
-| [4. Key Capabilities](#4-key-capabilities) | [11. Project Structure](#11-project-structure) | [18. Hackathon Context](#18-hackathon-context) |
-| [5. How QueryVista Works](#5-how-queryvista-works) | [12. Getting Started](#12-getting-started) | [19. Team](#19-team) |
-| [6. System Architecture](#6-system-architecture) | [13. Environment Configuration](#13-environment-configuration) | [20. License](#20-license) |
-| [7. Agent Tools](#7-agent-tools) | [14. Using QueryVista](#14-using-queryvista) | |
+| [3. The QueryVista Approach](#3-the-queryvista-approach) | [10. The Five Agent Tools](#10-the-five-agent-tools) | [17. Deployment](#17-deployment) |
+| [4. Quick Start](#4-quick-start) | [11. Schema Discovery](#11-schema-discovery) | [18. Running with Docker](#18-running-with-docker) |
+| [5. Architecture](#5-architecture) | [12. Read-Only Safety](#12-read-only-safety) | [19. Hackathon Context](#19-hackathon-context) |
+| [6. Conversation Flow](#6-conversation-flow) | [13. Session Model](#13-session-model) | [20. Team](#20-team) |
+| [7. Data Source Flexibility](#7-data-source-flexibility) | [14. Error Recovery](#14-error-recovery) | [21. License](#21-license) |
 
 ---
 
 ## 1. Overview
 
-QueryVista turns a SQL database into something you can hold a conversation with.
+QueryVista bridges the gap between non-technical stakeholders and structured business
+data. Instead of waiting on analysts to write SQL, a product manager can type:
 
-It is built for anyone who needs answers from data but shouldn't have to write SQL to get
-them — analysts exploring an unfamiliar schema, engineers who want a fast read on a
-dataset, and non-technical stakeholders who know the question but not the query.
+> **"Show me revenue by category for the last quarter as a pie chart."**
 
-The distinguishing property is **grounding**. QueryVista never guesses at table or column
-names: it discovers them from the connected database at request time, writes SQL against
-what is actually there, and every figure in its answer traces back to rows the database
-returned. The generated SQL is always shown, so any answer can be audited.
+And receive, in seconds:
 
-Bring your own SQLite file, or start immediately with the bundled e-commerce database.
+- The exact SQL the agent generated
+- The result rows in a sortable table
+- A Plotly pie chart (auto-chosen because the request asks for a share)
+- A natural-language explanation grounded in the returned data
+
+The agent is not a black box. Every capability is an explicit, testable tool:
+
+1. `get_schema` — live schema discovery
+2. `execute_query` — validated read-only execution
+3. `generate_chart` — deterministic chart selection + Plotly spec
+4. `generate_flowchart` — deterministic Mermaid diagrams (ER / process)
+5. `explain_data` — LLM-backed explanation with aggregate fallback
 
 ---
 
 ## 2. The Problem
 
-Getting an answer out of a database usually means crossing three gaps:
+Structured business data (sales, customers, orders, inventory) lives in relational
+databases. Non-technical stakeholders cannot query it directly. They must file tickets,
+wait for analysts, and often receive static screenshots that cannot be explored.
 
-| Gap | What it demands |
-|---|---|
-| **Question → query** | SQL fluency, plus familiarity with this schema's tables, columns and joins |
-| **Query → result** | Running it safely, without risking a write against production data |
-| **Result → meaning** | Reading raw rows, then moving to a separate tool to chart or explain them |
-
-Each gap filters people out. The person who has the question is frequently not the person
-who can write the join — and by the time the answer arrives, the follow-up question has to
-start the whole cycle again.
+Existing BI tools are powerful but have a steep learning curve and assume SQL literacy.
+Conversational NL-to-SQL chatbots exist but usually stop at returning a table — no
+visualization, no explanation, no diagram, and no guarantee the SQL is read-only or
+correct.
 
 ---
 
 ## 3. The QueryVista Approach
 
-One conversation spans all three gaps. A question goes in; SQL, results, a chart and an
-explanation come back together.
+QueryVista combines:
+
+- **A conversational frontend** — chat, tables, charts, diagrams, SQL viewer
+- **A FastAPI backend** — async, CORS, SSE-ready
+- **A LangChain tool-calling agent** — not a generic SQL agent; five explicit tools
+- **Deterministic engines** — Plotly spec builder, Mermaid diagram builder
+- **SQLite only** — file-based, zero-config, runs anywhere
+
+The agent reasons with these tools in sequence:
 
 ```
 User question
-     ↓
-LangChain agent  ──►  get_schema        live tables, columns, types, keys
-     ↓
-SQL generation   ──►  execute_query     validated, read-only, row-capped
-     ↓
-Result rows
-     ↓
-     ├──►  generate_chart      Plotly spec, type chosen from data shape + intent
-     ├──►  generate_flowchart  Mermaid ER / process diagram
-     └──►  explain_data        plain-language read of the actual rows
-     ↓
-Response envelope  →  answer · SQL · table · chart · diagram · explanation
+    → get_schema (if schema unknown)
+    → execute_query (read-only SQL, row/timeout limits)
+    → generate_chart (if data shape + intent warrant it)
+    → explain_data (grounded explanation)
+    → generate_flowchart (if structure/process question)
 ```
 
-Safety is enforced in code rather than by prompting. `execute_query` runs a statement
-through a dedicated validator before the database is touched, and the connection itself is
-opened with SQLite's read-only URI mode — so a write cannot succeed even if one were
-somehow generated.
-
 ---
 
-## 4. Key Capabilities
+## 4. Quick Start
 
-| Capability | What it does |
-|---|---|
-| **Natural-language queries** | Ask in plain English; the agent decides which tools to call and in what order. |
-| **Live schema discovery** | `get_schema` reads tables, columns, types, nullability, primary and foreign keys from the connected database at request time — no schema is hardcoded. |
-| **Read-only SQL execution** | Only single `SELECT`/`WITH` statements run. 15 keyword families (`INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `TRUNCATE`, `CREATE`, `ATTACH`, `PRAGMA`, …) and multi-statement input are rejected before execution. |
-| **SQL transparency** | Every data answer shows the exact statement that produced it, with a verified/error badge and one-click copy. |
-| **Interactive charts** | Bar, line, pie and scatter, rendered with Plotly from a spec the backend builds. Downloadable as PNG. |
-| **ER & process diagrams** | Mermaid entity-relationship diagrams generated from the live schema, and process flows built from agent-supplied steps. |
-| **Grounded explanations** | `explain_data` narrates only what the returned rows support, with a deterministic fallback if the model is unavailable. |
-| **Conversational context** | A bounded 6-turn memory plus the previous result set, so "which one generated the most?" resolves without re-asking. |
-| **Bounded error recovery** | A failed query is surfaced to the agent for exactly one automatic correction, capped in code — never an unbounded retry loop. |
-| **Bring your own database** | Upload any `.db` / `.sqlite` / `.sqlite3` file; it is validated and becomes that session's active database. |
-| **Session isolation** | Each browser session maps to its own active database — one session's upload is never visible to another. |
-| **Conversation history** | Recent conversations are kept per browser and can be reopened, each restoring its own agent context. |
-| **Dark & light themes** | Both themes carry through the interface, charts and diagrams. Preference persists. |
+### Prerequisites
 
-![QueryVista capabilities](screenshots/queryvista-features.png)
-*The landing page states only what the system actually implements — five agent tools, read-only execution, and schema grounding.*
+- Python 3.11+
+- Node 18+
 
----
+### Backend
 
-## 5. How QueryVista Works
+```bash
+cd backend
+python -m venv venv
+# Windows:
+venv\Scripts\activate
+# macOS/Linux:
+source venv/bin/activate
 
-![How QueryVista works](screenshots/queryvista-how-it-works.png)
+pip install -r requirements.txt
 
-**01 · Ask** — You type a question. The agent classifies intent and plans which of its five
-tools to use; a schema question and a data question take different paths.
+# Seed the sample e-commerce database (idempotent)
+python data/seed.py
 
-**02 · Inspect** — `get_schema` returns the live structure of the active database. Results
-are cached per session *and per database identity*, so switching databases mid-session can
-never serve a stale schema.
+# Copy environment config
+# Windows:
+copy ..\.env.example ..\.env
+# macOS/Linux:
+cp ../.env.example ../.env
 
-**03 · Query** — The agent writes SQL from the discovered schema. `execute_query` strips
-comments, rejects multi-statement input, confirms the statement is `SELECT`/`WITH`, and
-scans for destructive keywords with quoted spans masked — so `SELECT 'delete' AS status`
-and a column named `updated_at` both pass, while a real `DELETE` does not.
-
-**04 · Execute** — The statement runs on a read-only connection under a row ceiling and a
-statement timeout. Truncation is reported rather than hidden.
-
-**05 · Visualize** — When the shape and the request warrant it, `generate_chart` produces a
-Plotly spec, or `generate_flowchart` emits Mermaid syntax. If a chart would not add
-clarity, none is produced — and the interface shows none.
-
-**06 · Explain** — `explain_data` summarizes the result in plain language, bounded to the
-rows actually returned. Large results are aggregated in code before the model sees them.
-
----
-
-## 6. System Architecture
-
-```mermaid
-flowchart TD
-    U["Browser"] --> FE["React + Vite frontend<br/>chat · SQL panel · tables · charts · diagrams"]
-    FE -->|"HTTP/JSON + X-Session-Id"| API["FastAPI backend"]
-    API --> SESS["Session store<br/>active DB · memory · schema cache"]
-    API --> AGENT["LangChain tool-calling agent"]
-
-    AGENT --> T1["get_schema"]
-    AGENT --> T2["execute_query"]
-    AGENT --> T3["generate_chart"]
-    AGENT --> T4["generate_flowchart"]
-    AGENT --> T5["explain_data"]
-
-    T1 --> DAL["Database access layer<br/>SQLAlchemy engine + Inspector"]
-    T2 --> VAL["SQL validator<br/>read-only guard"] --> DAL
-    T3 --> VIZ["Plotly spec builder"]
-    T4 --> DIA["Mermaid builder"]
-
-    DBM["Database manager<br/>upload validation · session → active DB"] --> DAL
-    API --> DBM
-    DAL --> DB[("SQLite<br/>ecommerce.db or session upload")]
+uvicorn app.main:app --reload --port 8000
 ```
 
-Three boundaries define the design:
+Backend runs at `http://localhost:8000`. Health: `GET /api/health`.
 
-- **The frontend never reaches the database.** It only ever sees the response envelope.
-- **The LLM never executes SQL.** It can only request that `execute_query` run a statement,
-  and that tool validates independently of anything the model was told.
-- **The agent never chooses a database.** The database manager resolves `session_id → active
-  database`; every tool simply operates on "the active database".
+### Frontend
 
-The backend runs as a single FastAPI process with an in-process agent. There is no message
-queue, no external cache, and no separate model server.
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Frontend runs at `http://localhost:5173`.
+
+### Environment Variables
+
+See `.env.example` at the repo root for the full list.
+
+To enable the AI analyst, set:
+
+```env
+LLM_PROVIDER=openai        # openai | gemini | anthropic
+LLM_MODEL=                 # optional override
+LLM_API_KEY=your-key-here
+```
 
 ---
 
-## 7. Agent Tools
+## 5. Architecture
 
-Five custom function-calling tools, each with a Pydantic input schema and a structured JSON
-result. None of them takes `session_id` as an argument — the session travels through the
-backend's execution context, so the model cannot address another user's database.
+```
+┌─────────────────┐     HTTP/SSE     ┌──────────────────┐
+│  React Frontend │ ◄──────────────► │  FastAPI Backend │
+│  (Vite dev /    │                  │  (Uvicorn)       │
+│   Nginx prod)   │                  │                  │
+└─────────────────┘                  └────────┬─────────┘
+                                              │
+                                    ┌─────────┴─────────┐
+                                    │  Session Store    │
+                                    │  (in-memory)      │
+                                    └─────────┬─────────┘
+                                              │
+                                    ┌─────────┴─────────┐
+                                    │ Database Manager  │
+                                    │ (upload / active) │
+                                    └─────────┬─────────┘
+                                              │
+                                    ┌─────────┴─────────┐
+                                    │  Database Access  │
+                                    │     Layer         │
+                                    │  (SQLAlchemy)     │
+                                    └─────────┬─────────┘
+                                              │
+                                    ┌─────────┴─────────┐
+                                    │   SQLite File     │
+                                    │  (default/upload) │
+                                    └───────────────────┘
+```
 
-| Tool | Purpose | Input | Output |
-|---|---|---|---|
-| `get_schema` | Discover the live database structure | `table_filter?`, `refresh?` | `tables[]` with columns (name, type, nullable, primary key) and foreign keys, `table_count`, `cached` |
-| `execute_query` | Run one validated read-only statement | `sql`, `max_rows?` | `columns[]`, `rows[][]`, `row_count`, `truncated` — or a typed error |
-| `generate_chart` | Turn a bounded result into a chart spec | `data`, `intent?`, `x_field?`, `y_field?` | `chart_type` (`bar`/`line`/`pie`/`scatter`/`none`), `plotly_spec`, `title`, axis labels |
-| `generate_flowchart` | Produce Mermaid syntax | `diagram_type` (`er`/`process`/`decision`), `context` | `mermaid_syntax`, `title` |
-| `explain_data` | Narrate a result set | `data`, `question`, `chart?`, `correction_note?` | `explanation` |
+- **No Redis, PostgreSQL, or MCP** — SQLite is the only database
+- **Session state is in-memory** — lost on backend restart
+- **Docker Compose available** — see [Running with Docker](#18-running-with-docker)
 
-They are designed to compose. A typical data turn runs `get_schema → execute_query →
-generate_chart → explain_data`, with each tool's structured output feeding the next. A
-schema question skips the query path entirely and goes straight to `generate_flowchart`.
+---
 
-Two contracts are worth calling out:
+## 6. Conversation Flow
 
-- **`generate_chart` and `generate_flowchart` contain no LLM calls.** They are pure
-  functions. The model decides *what* to visualize; these modules decide *how* to render it.
-- **`generate_flowchart` has no built-in process template.** For a process diagram the agent
-  must supply the step graph itself; asking for one without steps returns
-  `generation_failed` rather than a canned diagram.
+1. User opens dashboard → sees landing page
+2. User optionally uploads a `.db` / `.sqlite` / `.sqlite3` file (max 50 MB)
+3. User starts a conversation (each thread gets its own session ID)
+4. User asks a natural-language question
+5. Backend routes through the agent:
+   - `get_schema` discovers tables/columns/types/PK/FK
+   - `execute_query` runs validated read-only SQL
+   - `generate_chart` builds Plotly spec from data shape + intent
+   - `explain_data` provides grounded explanation
+   - `generate_flowchart` renders Mermaid (ER / process / decision)
+6. Frontend renders: answer + SQL panel + table + chart + explanation + diagram
+7. Follow-ups resolve against conversation memory (bounded window) and last result set
+
+---
+
+## 7. Data Source Flexibility
+
+| Source | Description |
+|--------|-------------|
+| **Default** | Seeded e-commerce DB (`backend/data/ecommerce.db`) — committed, idempotent seed |
+| **Upload** | User provides SQLite file → validated, stored in `backend/data/uploads/`, becomes active DB for that session |
+| **Clear** | Reverts session to default DB |
+
+Upload validation: extension allowlist, size limit, **SQLite header check** (`SQLite format 3\0`).
 
 ---
 
 ## 8. Visualization & Diagram Engine
 
-Chart type is resolved deterministically in the backend from the result's shape combined
-with the phrasing of the request — not left to free-form model choice, so the same question
-yields the same chart.
+### Chart Selection (deterministic, no LLM)
 
-| Chart | Chosen when |
-|---|---|
-| **Bar** | A categorical column against a numeric one — the default for comparisons |
-| **Line** | The x-axis is a date or time bucket (including `YYYY-MM` month grouping), or a line is explicitly requested |
-| **Pie** | A share/proportion framing over a bounded set of categories |
-| **Scatter** | Two numeric measures with a correlation framing |
-| **none** | Scalars, empty results, all-text results, or a category column too high-cardinality to read — the interface then shows no chart at all |
+| Data shape | Intent hint | Chart type |
+|------------|-------------|------------|
+| Single numeric series over time | "trend", "over time" | Line |
+| Categorical + numeric | "compare", "by category" | Bar |
+| Part-of-whole | "share", "proportion", "%" | Pie |
+| Two numeric series | "correlation", "vs" | Scatter |
+| Single value | — | None (table only) |
 
-Charts render through Plotly from a spec the backend builds, and every chart carries a
-**Download chart** action that exports the rendered figure as a PNG.
+Palette: shared cyan/indigo/violet theme across all chart types.
 
-Diagrams are Mermaid syntax produced by the backend and rendered client-side. ER diagrams
-are derived from `get_schema`'s live output, so they describe whatever database is
-currently active. Process flows are rendered from a step graph the agent reasons out.
+### Diagrams (deterministic, no LLM)
 
-Each of these is shown end-to-end in [Example Conversations](#15-example-conversations).
+- **ER** — live schema → `erDiagram` (tables, columns, types, PK, FK)
+- **Process** — agent-supplied step graph → `flowchart TD`
+- **Decision** — entities/description → decision tree (bonus)
 
 ---
 
 ## 9. Conversational Intelligence
 
-Each session keeps a bounded window of recent turns plus the most recent result set, so
-follow-ups resolve against what was just discussed instead of starting over.
-
-```
-You    Show me the top 5 products by revenue.
-       → SQL + 5 rows + bar chart + explanation
-
-You    Which one generated the most revenue?
-       → answers from the previous result set, without re-querying
-
-You    Show me the monthly revenue trend as a line chart.
-       → new query, line chart
-```
-
-Grounding is enforced on the response as well as the query. When a turn runs more than one
-successful query, the prose is reconciled against the *final* result — so the narrative can
-never describe one query while the SQL panel and table show another.
-
-The agent is also bounded in code: a failed query gets exactly one automatic correction
-attempt, and the tool-calling loop has a hard step ceiling. Neither depends on the prompt
-behaving.
-
-Destructive requests are declined conversationally rather than attempted:
-
-> **You:** Delete all orders from the database.
->
-> **QueryVista:** I am unable to delete records — I only have read-only access to the
-> database and cannot perform write operations.
+- **Multi-turn context** — bounded window (6 turns) + last result set
+- **Pronoun/entity resolution** — "now show their trend" → re-queries if needed
+- **Self-correction** — exactly 1 retry on `execute_query` SQL errors
+- **Grounded explanations** — aggregates passed to LLM for >50 rows; fallback for LLM failure
+- **No hallucination** — agent never invents table/column names; must call `get_schema` first
 
 ---
 
-## 10. Technology Stack
+## 10. The Five Agent Tools
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 19, Vite 8, Tailwind CSS 4, lucide-react |
-| **Backend** | Python 3.11+, FastAPI, Uvicorn, Pydantic v2, pydantic-settings |
-| **Agent** | LangChain 1.3 tool-calling agent with five custom `StructuredTool`s |
-| **LLM providers** | OpenAI, Google Gemini, or Anthropic — selected at runtime by `LLM_PROVIDER` |
-| **Database** | SQLite via SQLAlchemy 2 (Core + Inspector) |
-| **Visualization** | Plotly (spec built server-side, rendered by `react-plotly.js`) |
-| **Diagramming** | Mermaid 11 |
-| **Testing** | pytest, httpx |
-| **Tooling** | oxlint, python-dotenv |
+| Tool | Purpose | LLM call? |
+|------|---------|-----------|
+| `get_schema` | Discover tables, columns, types, PK, FK | No |
+| `execute_query` | Run read-only SELECT/WITH, row/timeout limits | No |
+| `generate_chart` | Build Plotly spec from data + intent | No |
+| `explain_data` | Natural-language explanation of result | Yes |
+| `generate_flowchart` | Build Mermaid ER / process / decision | No |
 
-The provider layer is a thin factory behind LangChain's chat-model interface, so switching
-models is an environment change rather than a code change.
+All tools use **structured Pydantic I/O** — no free-text parsing.
 
 ---
 
-## 11. Project Structure
+## 11. Schema Discovery
 
-```
-QueryVista/
-├── backend/
-│   ├── app/
-│   │   ├── agent/            # agent service, tool registry, LLM provider,
-│   │   │                     # memory, error recovery, tool trace
-│   │   ├── tools/            # the five agent tools
-│   │   ├── db/               # database manager, engine factory,
-│   │   │                     # access layer, SQL validator
-│   │   ├── viz/              # deterministic Plotly spec builder
-│   │   ├── diagrams/         # Mermaid builder (ER / process / decision)
-│   │   ├── routes/           # /api/chat, /api/database/*, /api/schema, /api/health
-│   │   ├── session/          # session store + execution context
-│   │   ├── models/           # Pydantic request/response contracts
-│   │   ├── config.py         # environment-driven settings
-│   │   └── main.py           # FastAPI app + CORS
-│   ├── data/
-│   │   ├── ecommerce.db      # seeded demo database (committed)
-│   │   ├── seed.py           # idempotent seed script
-│   │   └── uploads/          # session-uploaded databases (gitignored)
-│   ├── tests/                # 19 test modules
-│   └── requirements.txt
-├── frontend/
-│   └── src/
-│       ├── pages/            # LandingPage, DashboardPage
-│       ├── components/       # chat, SQL panel, result table, chart & diagram cards
-│       ├── lib/              # session, conversation history, theme, formatting
-│       ├── api/client.js     # backend client (sends X-Session-Id)
-│       └── index.css         # design tokens + light/dark themes
-├── docs/                     # PRD, TRD, architecture, tool contracts, test plan
-├── screenshots/
-└── .env.example
+`get_schema` uses SQLAlchemy Inspector against the **currently active database** (default
+or session upload). Returns structured JSON with:
+
+```json
+{
+  "tables": [
+    {
+      "name": "products",
+      "columns": [
+        {"name": "id", "type": "INTEGER", "primary_key": true, "nullable": false},
+        {"name": "name", "type": "VARCHAR(150)", "primary_key": false, "nullable": false}
+      ],
+      "foreign_keys": [{"column": "category_id", "references": "categories.id"}]
+    }
+  ]
+}
 ```
 
 ---
 
-## 12. Getting Started
+## 12. Read-Only Safety
 
-### Prerequisites
+`execute_query` rejects any statement containing forbidden keywords at word boundaries,
+with quoted-string masking:
 
-- **Python 3.11+**
-- **Node.js 18+**
-- An API key for one supported LLM provider (OpenAI, Google Gemini, or Anthropic)
-
-### Backend setup
-
-```bash
-cd backend
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-# macOS / Linux
-source venv/bin/activate
-
-pip install -r requirements.txt
-
-# Create the seeded demo database (idempotent — safe to re-run)
-python data/seed.py
+```python
+FORBIDDEN = {"INSERT", "UPDATE", "DELETE", "DROP", "ALTER", "TRUNCATE", ...}
 ```
 
-### Environment
-
-```bash
-# from the project root
-cp .env.example .env        # Windows: copy .env.example .env
-```
-
-Then set `LLM_PROVIDER` and `LLM_API_KEY` in `.env` (see
-[Environment Configuration](#13-environment-configuration)).
-
-### Frontend setup
-
-```bash
-cd frontend
-npm install
-```
-
-### Run the application
-
-QueryVista runs as two processes, so use **two terminals**.
-
-```bash
-# Terminal 1 — backend on http://localhost:8000
-cd backend
-uvicorn app.main:app --reload --port 8000
-```
-
-```bash
-# Terminal 2 — frontend on http://localhost:5173
-cd frontend
-npm run dev
-```
-
-Open **http://localhost:5173**.
-
-> The dev server is pinned to port **5173** because the backend's default
-> `CORS_ALLOWED_ORIGINS` allows exactly that origin. If the port is already taken, Vite will
-> stop with an error rather than silently move to another port and leave the API blocked —
-> free the port, or add the new origin to `CORS_ALLOWED_ORIGINS`.
+False positives avoided:
+- `SELECT updated_at FROM orders` ✅ (not `UPDATE`)
+- `SELECT 'delete' AS status` ✅ (quoted)
 
 ---
 
-## 13. Environment Configuration
+## 13. Session Model
 
-All configuration is environment-driven; `.env.example` at the project root lists every
-variable. The backend resolves `.env` from the project root regardless of which directory
-you start it from.
-
-| Variable | Purpose | Required |
-|---|---|---|
-| `LLM_PROVIDER` | `openai` \| `gemini` \| `anthropic` | Yes, for chat |
-| `LLM_API_KEY` | API key for the selected provider | Yes, for chat |
-| `LLM_MODEL` | Model override; a sensible per-provider default is used if blank | No |
-| `DATABASE_URL` | Connection string for the default/demo database | No — defaults to `sqlite:///./data/ecommerce.db` |
-| `DATABASE_UPLOAD_DIR` | Where session-uploaded databases are stored | No — defaults to `./data/uploads` |
-| `DATABASE_UPLOAD_MAX_MB` | Upload size limit | No — defaults to `50` |
-| `HARD_ROW_CEILING` | Server-enforced max rows; the agent can lower this but never raise it | No — defaults to `1000` |
-| `DEFAULT_MAX_ROWS` | Row cap when the agent does not request one | No — defaults to `200` |
-| `QUERY_TIMEOUT_SECONDS` | Statement timeout | No — defaults to `15` |
-| `CORS_ALLOWED_ORIGINS` | Comma-separated allowed origins | No — defaults to `http://localhost:5173` |
-| `BACKEND_HOST` / `BACKEND_PORT` | Bind address and port | No |
-| `VITE_API_BASE_URL` | Backend base URL used by the frontend | No — defaults to `http://localhost:8000` |
-
-`.env` is gitignored and must never be committed. Without an API key the backend still
-starts and serves `/api/health` and every `/api/database/*` endpoint — chat returns a
-structured `llm_unavailable` message instead of failing.
+- `X-Session-Id` header on every request (frontend generates UUID, stores in localStorage)
+- Each conversation thread → new session ID → isolated backend context
+- In-memory session store holds:
+  - Active database path (default or upload)
+  - Schema cache (invalidated on DB switch)
+  - Conversation memory (bounded)
+  - Last result set (for follow-ups)
 
 ---
 
-## 14. Using QueryVista
+## 14. Error Recovery
 
-1. Start both processes and open the dashboard.
-2. The seeded **ecommerce.db** is connected by default — or upload your own SQLite file
-   from **Active database → Upload database**.
-3. Ask a question in plain English, or pick one of the suggested prompts.
-4. Read the answer, then expand **Generated SQL** to see exactly what ran.
-5. Review the result table, chart, or diagram beneath it.
-6. Ask a follow-up — the agent keeps the thread's context.
-7. Start a **New Chat** for a clean context, and reopen any recent conversation from the
-   sidebar.
-
-![Suggested prompts](screenshots/queryvista-demo-prompts.png)
+- **Single retry** on `execute_query` SQL errors (ContextVar-budgeted, not prompt-based)
+- **LLM unavailability** → structured error envelope, no crash
+- **Upload validation failure** → 400 with user-safe message
+- **No uncaught exceptions** cross tool boundaries
 
 ---
 
 ## 15. Example Conversations
 
-### Product revenue → bar chart
-
-> **"Show me the top 5 products by revenue."**
-
-![Top products query](screenshots/top-products-query.png)
-
-The answer leads with the finding, then exposes the generated SQL with a **verified** badge
-and the result table underneath.
-
-![Bar chart with explanation](screenshots/bar-chart.png)
-
-A bar chart follows for the comparison, with a **Download chart** action and an AI
-explanation grounded in the same rows.
-
-### Revenue trend → line chart
-
-> **"Show me the monthly revenue trend over the available order history as a line chart."**
-
-![Monthly revenue query](screenshots/monthly-revenue-query.png)
-![Line chart](screenshots/line-chart.png)
-
-The month grouping is recognised as a time axis, so the result is drawn as a trend.
-
-### Category share → pie chart
-
-> **"Show me the revenue share by product category as a pie chart."**
-
-![Category revenue query](screenshots/category-revenue-query.png)
-![Pie chart](screenshots/pie-chart.png)
-
-### Process understanding → flowchart
-
-> **"Show me how an order moves from customer placement through payment and inventory."**
-
-![Process flow diagram](screenshots/process-flow.png)
-
-No SQL runs here. The agent reasons out the step sequence itself and passes it to
-`generate_flowchart`, which renders it as Mermaid — the tool holds no built-in process
-template, so the steps genuinely come from the request.
-
-### Database structure → ER diagram
-
-> **"Show me the complete ER diagram of my database, including all tables, columns, primary keys, foreign keys, and relationships."**
-
-![ER diagram overview](screenshots/er-diagram-overview.png)
-
-The diagram is generated from the live schema — every entity, column, key and relationship
-comes from the connected database, not a stored picture.
-
-![ER diagram detail](screenshots/er-diagram-details.png)
-
-Large schemas stay readable at full scale inside a scrollable viewport rather than being
-shrunk to fit.
+> **User:** "What are the top 5 categories by revenue?"
+> 
+> **Agent:** Runs query → bar chart → explanation → "Electronics leads at $124K"
+> 
+> **User:** "Show me the ER diagram for this database."
+> 
+> **Agent:** Calls `generate_flowchart` with `diagram_type: "er"` → renders Mermaid
+> 
+> **User:** "Compare revenue by month for 2023."
+> 
+> **Agent:** Line chart (time-series intent) → explains seasonal peaks
 
 ---
 
@@ -530,12 +372,82 @@ QueryVista currently runs as a documented local two-process setup: Uvicorn servi
 FastAPI backend, and Vite serving the frontend (`npm run build` produces a static bundle in
 `frontend/dist`).
 
-No container or CI configuration is present in this repository yet, so no Docker commands
-are documented here.
+**Docker Compose is also available** — see [Running with Docker](#18-running-with-docker).
 
 ---
 
-## 18. Hackathon Context
+## 18. Running with Docker
+
+QueryVista can be run entirely with Docker. This requires Docker Desktop to be
+installed on your machine.
+
+### Prerequisites
+
+- Docker Desktop (or equivalent Docker Engine + Compose v2)
+- A `.env` file at the repo root (copy from `.env.example`)
+
+### Environment
+
+Copy `.env.example` to `.env` and fill in your LLM credentials:
+
+```bash
+cp .env.example .env
+```
+
+The backend reads `LLM_PROVIDER`, `LLM_MODEL`, and `LLM_API_KEY` from `.env`.
+These are passed into the backend container via Compose and are **never** baked
+into the image or committed to the repository.
+
+### Build and run
+
+```bash
+docker compose up --build
+```
+
+### Stop
+
+```bash
+docker compose down
+```
+
+### Access
+
+| Service  | URL                     |
+|----------|-------------------------|
+| Frontend | http://localhost:5173  |
+| Backend  | http://localhost:8000  |
+
+Open the frontend URL in your browser. The Swagger API docs are available at
+`http://localhost:8000/docs`.
+
+### Persistence
+
+Two named Docker volumes keep state across container restarts and recreations:
+
+- `queryvista-data` — the SQLite database (`backend/data/ecommerce.db`)
+- `queryvista-uploads` — user-uploaded SQLite files
+
+Database writes and uploaded files survive `docker compose down` / `up` because
+they live in volumes, not in the writable container layer. **Do not** run
+`docker compose down -v` unless you intend to delete this data.
+
+### Logs
+
+```bash
+docker compose logs backend        # backend (FastAPI/Uvicorn)
+docker compose logs frontend       # frontend (Nginx)
+docker compose logs -f backend     # follow backend logs
+```
+
+### Limitations
+
+- The session model is in-memory (per the application design). Sessions are lost
+  when the backend container is recreated. Run a single backend instance.
+- There is no Redis, PostgreSQL, or MCP server — SQLite is the only database.
+
+---
+
+## 19. Hackathon Context
 
 QueryVista was built for the **iTech AI Innovation Hackathon 2026** (1–7 August 2026),
 under the challenge *Building Intelligent LLM Agents for Database Interaction &
@@ -550,7 +462,7 @@ composed at runtime against whichever database the session has connected.
 
 ---
 
-## 19. Team
+## 20. Team
 
 QueryVista was built by a team of student developers for the **iTech AI Innovation Hackathon 2026**.
 
@@ -562,7 +474,7 @@ QueryVista was built by a team of student developers for the **iTech AI Innovati
 
 ---
 
-## 20. License
+## 21. License
 
 No license file is currently included in this repository. All rights reserved by the
 authors unless a license is added.
