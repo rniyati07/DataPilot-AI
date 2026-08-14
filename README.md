@@ -16,6 +16,7 @@ in one conversation.
 [![SQLite](https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white)](https://sqlite.org)
 [![Plotly](https://img.shields.io/badge/Plotly-3-3F4F75?logo=plotly&logoColor=white)](https://plotly.com/javascript)
 [![Mermaid](https://img.shields.io/badge/Mermaid-11-FF3670?logo=mermaid&logoColor=white)](https://mermaid.js.org)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose)
 [![Tests](https://img.shields.io/badge/backend_tests-290_passing-3fb950)](#16-testing)
 
 ![QueryVista landing page](screenshots/queryvista-landing-hero.png)
@@ -284,6 +285,7 @@ Destructive requests are declined conversationally rather than attempted:
 | **Visualization** | Plotly (spec built server-side, rendered by `react-plotly.js`) |
 | **Diagramming** | Mermaid 11 |
 | **Testing** | pytest, httpx |
+| **Containerization** | Docker (multi-stage images) + Docker Compose; Nginx serves the built frontend |
 | **Tooling** | oxlint, python-dotenv |
 
 The provider layer is a thin factory behind LangChain's chat-model interface, so switching
@@ -314,16 +316,21 @@ QueryVista/
 │   │   ├── seed.py           # idempotent seed script
 │   │   └── uploads/          # session-uploaded databases (gitignored)
 │   ├── tests/                # 19 test modules
-│   └── requirements.txt
+│   ├── requirements.txt
+│   └── Dockerfile            # backend image (multi-stage, Uvicorn)
 ├── frontend/
-│   └── src/
-│       ├── pages/            # LandingPage, DashboardPage
-│       ├── components/       # chat, SQL panel, result table, chart & diagram cards
-│       ├── lib/              # session, conversation history, theme, formatting
-│       ├── api/client.js     # backend client (sends X-Session-Id)
-│       └── index.css         # design tokens + light/dark themes
+│   ├── src/
+│   │   ├── pages/            # LandingPage, DashboardPage
+│   │   ├── components/       # chat, SQL panel, result table, chart & diagram cards
+│   │   ├── lib/              # session, conversation history, theme, formatting
+│   │   ├── api/client.js     # backend client (sends X-Session-Id)
+│   │   └── index.css         # design tokens + light/dark themes
+│   ├── Dockerfile            # frontend image (Vite build → Nginx)
+│   └── nginx.conf            # Nginx server config for the built SPA
 ├── docs/                     # PRD, TRD, architecture, tool contracts, test plan
 ├── screenshots/
+├── docker-compose.yml        # backend + frontend services, volumes, healthcheck
+├── .dockerignore
 └── .env.example
 ```
 
@@ -394,6 +401,36 @@ Open **http://localhost:5173**.
 > stop with an error rather than silently move to another port and leave the API blocked —
 > free the port, or add the new origin to `CORS_ALLOWED_ORIGINS`.
 
+### Alternative: run with Docker
+
+Everything above describes the local two-process setup. If you would rather not install
+Python and Node at all, the repository also ships a Docker Compose stack that builds and
+runs both services.
+
+**Prerequisites:** Docker Engine with the Compose plugin (`docker compose`).
+
+```bash
+# from the project root
+cp .env.example .env        # Windows: copy .env.example .env
+```
+
+Set `LLM_PROVIDER` and `LLM_API_KEY` in `.env`; Compose reads that file and passes the LLM
+settings into the backend container. Then:
+
+```bash
+docker compose up --build
+```
+
+Open **http://localhost:5173** — the same URL as the local setup.
+
+```bash
+docker compose down          # stop the stack, keep the data volumes
+docker compose down -v       # stop and delete the database + upload volumes
+```
+
+No seed step is needed: the seeded `ecommerce.db` is copied into the backend image at build
+time, so the demo database is connected on first start.
+
 ---
 
 ## 13. Environment Configuration
@@ -420,6 +457,13 @@ you start it from.
 `.env` is gitignored and must never be committed. Without an API key the backend still
 starts and serves `/api/health` and every `/api/database/*` endpoint — chat returns a
 structured `llm_unavailable` message instead of failing.
+
+Under Docker the same variables apply, with two differences. Only `LLM_PROVIDER`,
+`LLM_MODEL` and `LLM_API_KEY` are read from your root `.env` — Compose sets the remaining
+backend variables itself (including `BACKEND_HOST=0.0.0.0`, so the container is reachable
+from the host), so changing them means editing `docker-compose.yml` rather than `.env`. And
+`VITE_API_BASE_URL` is a **build argument** baked into the frontend bundle at image build
+time (`http://localhost:8000`); changing it requires a rebuild, not a restart.
 
 ---
 
@@ -526,12 +570,46 @@ browser/E2E layer, and the UI has been verified manually.
 
 ## 17. Deployment
 
-QueryVista currently runs as a documented local two-process setup: Uvicorn serving the
-FastAPI backend, and Vite serving the frontend (`npm run build` produces a static bundle in
-`frontend/dist`).
+QueryVista runs either as the local two-process setup — Uvicorn serving the FastAPI
+backend, and Vite serving the frontend (`npm run build` produces a static bundle in
+`frontend/dist`) — or as a containerized stack defined by `docker-compose.yml`.
 
-No container or CI configuration is present in this repository yet, so no Docker commands
-are documented here.
+```bash
+docker compose up --build     # build both images and start the stack
+docker compose down           # stop, keeping the data volumes
+docker compose down -v        # stop and remove the volumes
+```
+
+Two services are defined:
+
+| Service | Image build | Host port | Container |
+|---|---|---|---|
+| `backend` | `backend/Dockerfile` — `python:3.12-slim`, multi-stage (deps compiled in a builder stage, copied into a slim runtime) | `8000` → `8000` | `queryvista-backend`, running `uvicorn app.main:app --host 0.0.0.0 --port 8000` |
+| `frontend` | `frontend/Dockerfile` — `node:20-alpine` builds the Vite bundle, `nginx:alpine` serves it | `5173` → `80` | `queryvista-frontend` |
+
+Both images are built from the project root as the build context, with `.dockerignore`
+excluding `.git`, `.env`, `venv/`, `node_modules/`, `dist/`, caches and SQLite journal
+files.
+
+Notes on how the stack behaves:
+
+- **Service communication is browser-side, not container-to-container.** The frontend bundle
+  is built with `VITE_API_BASE_URL=http://localhost:8000`, so the browser calls the
+  published backend port directly. The backend's `CORS_ALLOWED_ORIGINS` is set to
+  `http://localhost:5173`, which matches the published frontend port. `frontend` declares
+  `depends_on: backend` for start ordering.
+- **Nginx serves the built SPA** from `/usr/share/nginx/html` using `frontend/nginx.conf`,
+  with an `index.html` fallback for client-side routes, gzip, long-lived caching for hashed
+  assets, and `X-Frame-Options` / `X-Content-Type-Options` / `X-XSS-Protection` /
+  `Referrer-Policy` headers.
+- **SQLite and uploads persist in named volumes** — `queryvista-data` mounted at
+  `/app/backend/data` and `queryvista-uploads` at `/app/backend/data/uploads` — so the
+  demo database and any uploaded databases survive `docker compose down`.
+- **The backend has a healthcheck** that polls `GET /api/health` with `curl` every 30s
+  (10s timeout, 3 retries, 10s start period).
+
+There is no CI configuration in this repository, and no cloud/orchestration deployment is
+defined beyond this Compose stack.
 
 ---
 
